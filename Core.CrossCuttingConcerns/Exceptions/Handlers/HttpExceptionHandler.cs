@@ -2,11 +2,7 @@
 using Core.CrossCuttingConcerns.Exceptions.HttpProblemDetails;
 using Core.CrossCuttingConcerns.Exceptions.Types;
 using Microsoft.AspNetCore.Http;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using ValidationProblemDetails = Core.CrossCuttingConcerns.Exceptions.HttpProblemDetails.ValidationProblemDetails;
 
 namespace Core.CrossCuttingConcerns.Exceptions.Handlers
 {
@@ -29,6 +25,13 @@ namespace Core.CrossCuttingConcerns.Exceptions.Handlers
         {
             Response.StatusCode = StatusCodes.Status500InternalServerError;
             string details = new InternalServerErrorProblemDetails(exception.Message).AsJson();
+            return Response.WriteAsync(details);
+        }
+
+        protected override Task HandleException(ValidationException validationException)
+        {
+            Response.StatusCode = StatusCodes.Status400BadRequest;
+            string details = new ValidationProblemDetails(validationException.Errors).AsJson();
             return Response.WriteAsync(details);
         }
     }
