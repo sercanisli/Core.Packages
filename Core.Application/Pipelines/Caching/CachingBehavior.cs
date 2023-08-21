@@ -1,11 +1,9 @@
 ﻿using MediatR;
 using Microsoft.Extensions.Caching.Distributed;
-using System;
-using System.Collections.Generic;
-using System.Linq;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
 
 namespace Core.Application.Pipelines.Caching
 {
@@ -14,11 +12,13 @@ namespace Core.Application.Pipelines.Caching
     {
         private readonly CacheSettings _cacheSettings;
         private readonly IDistributedCache _cache;
+        private readonly ILogger<CachingBehavior<TRequest, TResponse>> _logger;
 
-        public CachingBehavior(IDistributedCache cache, CacheSettings cacheSettings)
+        public CachingBehavior(IDistributedCache cache, IConfiguration configuration, ILogger<CachingBehavior<TRequest, TResponse>> logger)
         {
             _cache = cache;
-            _cacheSettings = cacheSettings;
+            _cacheSettings = configuration.GetSection("CacheSettings").Get<CacheSettings>() ?? throw new InvalidOperationException();
+            _logger = logger;
         }
 
         public async Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
@@ -32,6 +32,7 @@ namespace Core.Application.Pipelines.Caching
             if(cachedResponse != null)
             {
                 response = JsonSerializer.Deserialize<TResponse>(Encoding.Default.GetString(cachedResponse));
+                _logger.LogInformation($"Fetched from Cache -> {request.CacheKey}");
             }
             else
             {
@@ -43,10 +44,11 @@ namespace Core.Application.Pipelines.Caching
         private async Task<TResponse?> GetResponseAndAddToCache(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
         {
             TResponse response = await next();
-            TimeSpan? slidingExpiration = request.SlidingExpiration ?? TimeSpan.FromDays(_cacheSettings.SlidingExpiratiton);
+            TimeSpan? slidingExpiration = request.SlidingExpiration ?? TimeSpan.FromDays(_cacheSettings.SlidingExpiration);
             DistributedCacheEntryOptions cacheOptions = new() { SlidingExpiration= slidingExpiration };
             byte[] serializedData = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(response));
             await _cache.SetAsync(request.CacheKey, serializedData, cacheOptions, cancellationToken);
+            _logger.LogInformation($"Added to Cache -> {request.CacheKey}");
 
             return response;
         }
