@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace Core.Application.Pipelines.Caching
@@ -25,6 +26,21 @@ namespace Core.Application.Pipelines.Caching
                 return await next();
             }
             TResponse response = await next();
+
+            if (request.CacheGroupKey != null)
+            {
+                byte[]? cachedGroup = await _cache.GetAsync(request.CacheGroupKey, cancellationToken); 
+                if (cachedGroup != null)
+                {
+                    var keysInGroup = JsonSerializer.Deserialize<HashSet<string>>(Encoding.Default.GetString(cachedGroup))!;
+                    foreach (string key in keysInGroup)
+                    {
+                        await _cache.RemoveAsync(key, cancellationToken);
+                    }
+                    await _cache.RemoveAsync(request.CacheGroupKey, cancellationToken);
+                    await _cache.RemoveAsync(key: $"{request.CacheGroupKey}SlidingExpiration", cancellationToken);
+                }
+            }
 
             if (request.CacheKey!=null)
             {  

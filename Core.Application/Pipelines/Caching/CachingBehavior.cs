@@ -50,7 +50,31 @@ namespace Core.Application.Pipelines.Caching
             await _cache.SetAsync(request.CacheKey, serializedData, cacheOptions, cancellationToken);
             _logger.LogInformation($"Added to Cache -> {request.CacheKey}");
 
+            if (request.CacheGroupKey != null)
+            {
+                byte[]? cachedGroup = await _cache.GetAsync(request.CacheGroupKey, cancellationToken);
+                HashSet<string> keysInGroup;
+                if (cachedGroup != null)
+                {
+                    keysInGroup = JsonSerializer.Deserialize<HashSet<string>>(Encoding.Default.GetString(cachedGroup))!;
+                    if (!keysInGroup.Contains(request.CacheKey))
+                    {
+                        keysInGroup.Add(request.CacheKey);
+                    }
+                }
+                else
+                {
+                    keysInGroup = new HashSet<string>(new[] { request.CacheKey });
+                }
+
+                byte[] serializeGroupData = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(keysInGroup));
+                await _cache.SetAsync(request.CacheGroupKey, serializeGroupData, cacheOptions, cancellationToken);
+                _logger.LogInformation($"Added to Cache -> {request.CacheGroupKey}");
+            }
+
             return response;
         }
+
+
     }
 }
